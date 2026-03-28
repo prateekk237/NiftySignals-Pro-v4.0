@@ -58,6 +58,7 @@ def predict_next_day_gap(
     dxy_change: float = 0.0,
     crude_change: float = 0.0,
     global_data: Dict = None,
+    nifty_close: float = 0.0,
 ) -> Dict:
     """
     10-factor BTST gap prediction.
@@ -367,6 +368,58 @@ def predict_next_day_gap(
         "recommendation": recommendation,
     }
 
+    # ═══════════════════ GIFT NIFTY PROXY ═════════════════════
+    # GIFT NIFTY = NIFTY Close × (1 + weighted_global_change × correlation)
+    # Correlation: NIFTY moves ~85% of S&P direction, ~40% of Asian
+    gift_nifty = None
+    if nifty_close > 0:
+        # Get S&P change as primary driver
+        sp_change_pct = 0
+        if us_futures_data:
+            sp_changes = []
+            for k, d in us_futures_data.items():
+                if k in ["SP500_FUT", "NASDAQ_FUT", "DOW_FUT"]:
+                    c = d.get("change_pct", 0) if isinstance(d, dict) else 0
+                    if c != 0:
+                        sp_changes.append(c)
+            if sp_changes:
+                sp_change_pct = np.mean(sp_changes)
+
+        # Asian markets as secondary input
+        asian_change_pct = 0
+        if asian_data:
+            as_changes = []
+            for k, d in asian_data.items():
+                c = d.get("change_pct", 0) if isinstance(d, dict) else 0
+                if c != 0:
+                    as_changes.append(c)
+            if as_changes:
+                asian_change_pct = np.mean(as_changes)
+
+        # Weighted: 70% US futures, 20% Asian, 10% crude/DXY impact
+        combined_change = (
+            sp_change_pct * 0.70 +
+            asian_change_pct * 0.20 +
+            (-crude_change * 0.05) +  # Rising crude = bearish India
+            (-dxy_change * 0.05)      # Rising DXY = bearish India
+        )
+
+        # Apply 0.85 correlation factor (India tracks ~85% of global moves)
+        estimated_gap_pct = combined_change * 0.85
+        gift_nifty_price = round(nifty_close * (1 + estimated_gap_pct / 100), 2)
+        gift_nifty_change = round(gift_nifty_price - nifty_close, 2)
+
+        gift_nifty = {
+            "estimated_price": gift_nifty_price,
+            "nifty_close": nifty_close,
+            "change_pts": gift_nifty_change,
+            "change_pct": round(estimated_gap_pct, 2),
+            "gap_range_low": round(nifty_close + gift_nifty_change * 0.7, 2),
+            "gap_range_high": round(nifty_close + gift_nifty_change * 1.3, 2),
+            "drivers": f"US:{sp_change_pct:+.2f}% Asia:{asian_change_pct:+.2f}%",
+            "note": "Estimated proxy (GIFT NIFTY not on yfinance)",
+        }
+
     return {
         "prediction": prediction,
         "emoji": emoji,
@@ -379,6 +432,7 @@ def predict_next_day_gap(
         "total_factors": 10,
         "btst_trade": btst_trade,
         "gap_day_info": gap_day_info,
+        "gift_nifty": gift_nifty,
         "timestamp": datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S"),
         "best_check_time": "3:00 PM - 3:30 PM IST",
     }
