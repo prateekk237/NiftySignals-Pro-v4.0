@@ -119,10 +119,16 @@ async def get_option_chain(
 async def get_global():
     score_data = cache.get("global:score")
     indian_idx = cache.get("global:indian_indices")
-    if score_data and score_data.get("score", 0) != 0:
-        return _sanitize({**score_data, "indian_indices": indian_idx or {}})
+    raw_global = cache.get("global:data")
 
-    # Cache empty — fetch fresh (global markets trade 24/7)
+    if score_data and score_data.get("score", 0) != 0:
+        return _sanitize({
+            **score_data,
+            "indian_indices": indian_idx or {},
+            "global_indices": _format_global_indices(raw_global) if raw_global else {},
+        })
+
+    # Cache empty — fetch fresh
     try:
         from global_analysis import fetch_all_global_data, calculate_global_score, analyze_indian_indices
         data = fetch_all_global_data()
@@ -132,11 +138,54 @@ async def get_global():
             cache.set("global:score", {"score": score, "label": label, "details": details}, ttl=600)
             idx = analyze_indian_indices()
             cache.set("global:indian_indices", idx, ttl=600)
-            return _sanitize({"score": score, "label": label, "details": details, "indian_indices": idx or {}})
+            return _sanitize({
+                "score": score, "label": label, "details": details,
+                "indian_indices": idx or {},
+                "global_indices": _format_global_indices(data),
+            })
     except Exception as e:
         import logging
         logging.getLogger(__name__).warning(f"Global fetch failed: {e}")
-    return {"score": 0, "label": "NO DATA", "indian_indices": {}, "details": {}}
+    return {"score": 0, "label": "NO DATA", "indian_indices": {}, "details": {}, "global_indices": {}}
+
+
+# Display names and grouping for global indices
+_INDEX_DISPLAY = {
+    "SP500_FUT": {"name": "S&P 500 Futures", "group": "US", "flag": "🇺🇸"},
+    "DOW_FUT": {"name": "Dow Futures", "group": "US", "flag": "🇺🇸"},
+    "NASDAQ_FUT": {"name": "Nasdaq Futures", "group": "US", "flag": "🇺🇸"},
+    "NIKKEI": {"name": "Nikkei 225", "group": "Asia", "flag": "🇯🇵"},
+    "HANGSENG": {"name": "Hang Seng", "group": "Asia", "flag": "🇭🇰"},
+    "SHANGHAI": {"name": "Shanghai Comp", "group": "Asia", "flag": "🇨🇳"},
+    "STRAITS": {"name": "Straits Times", "group": "Asia", "flag": "🇸🇬"},
+    "FTSE100": {"name": "FTSE 100", "group": "Europe", "flag": "🇬🇧"},
+    "DAX": {"name": "DAX", "group": "Europe", "flag": "🇩🇪"},
+    "CAC40": {"name": "CAC 40", "group": "Europe", "flag": "🇫🇷"},
+    "CRUDE": {"name": "Crude Oil", "group": "Commodities", "flag": "🛢"},
+    "GOLD": {"name": "Gold", "group": "Commodities", "flag": "🥇"},
+    "DXY": {"name": "Dollar Index", "group": "Currency", "flag": "💵"},
+    "USDINR": {"name": "USD/INR", "group": "Currency", "flag": "🇮🇳"},
+    "VIX_US": {"name": "US VIX", "group": "Volatility", "flag": "📊"},
+    "INDIAVIX": {"name": "India VIX", "group": "Volatility", "flag": "📊"},
+}
+
+def _format_global_indices(data: dict) -> dict:
+    """Format raw global data into display-ready format with names."""
+    if not data:
+        return {}
+    result = {}
+    for key, meta in _INDEX_DISPLAY.items():
+        if key in data:
+            d = data[key]
+            result[key] = {
+                "name": meta["name"],
+                "group": meta["group"],
+                "flag": meta["flag"],
+                "price": d.get("price", 0),
+                "change": d.get("change", 0),
+                "change_pct": d.get("change_pct", 0),
+            }
+    return result
 
 
 @router.get("/vix-history")
