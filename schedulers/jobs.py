@@ -684,6 +684,14 @@ async def job_btst_5m():
             indicator_signals = cache.get(f"indicator_signals:{symbol}") or {}
             oi_data = cache.get(f"oi:{symbol}") or {}
 
+            # Get NIFTY close for GIFT NIFTY proxy
+            nifty_close = 0.0
+            price_data = cache.get(f"price:NIFTY50") or {}
+            if isinstance(price_data, dict):
+                nifty_close = price_data.get("price", 0)
+            if nifty_close == 0 and df is not None and not df.empty:
+                nifty_close = float(df["Close"].iloc[-1])
+
             btst = btst_service.predict_gap(
                 global_data=global_data,
                 vix_current=vix_current,
@@ -693,6 +701,7 @@ async def job_btst_5m():
                 indicator_signals=indicator_signals,
                 news_score=news_score,
                 news_headlines=news_headlines,
+                nifty_close=nifty_close if symbol == "NIFTY50" else 0,
             )
 
             cache.set(f"btst:{symbol}", btst, ttl=600)
