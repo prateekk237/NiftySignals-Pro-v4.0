@@ -30,8 +30,9 @@ class BTSTService:
         news_headlines: List = None,
         dxy_change: float = 0.0,
         crude_change: float = 0.0,
+        nifty_close: float = 0.0,
     ) -> Dict:
-        """Predict next-day gap with all 10 factors."""
+        """Predict next-day gap with all 10 factors + GIFT NIFTY proxy."""
         try:
             return predict_next_day_gap(
                 us_futures_data=us_futures_data,
@@ -48,6 +49,7 @@ class BTSTService:
                 dxy_change=dxy_change,
                 crude_change=crude_change,
                 global_data=global_data,
+                nifty_close=nifty_close,
             )
         except Exception as e:
             logger.error(f"BTST prediction failed: {e}")
