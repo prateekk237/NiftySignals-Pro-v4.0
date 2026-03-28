@@ -126,6 +126,11 @@ app.include_router(accuracy_router)
 
 
 # ── Health Endpoint ───────────────────────────────────────────
+@app.get("/")
+async def root():
+    """Root redirect to health."""
+    return {"message": "NiftySignals Pro v4.0", "docs": "/docs", "health": "/health"}
+
 @app.get("/health")
 async def health():
     """Health check — scheduler, cache, circuit breakers, LLM providers."""

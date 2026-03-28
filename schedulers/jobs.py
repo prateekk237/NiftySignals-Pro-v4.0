@@ -764,15 +764,11 @@ async def job_daily_levels():
 def setup_scheduler(scheduler):
     """Register all jobs with APScheduler. Called from main.py startup."""
 
-    # Helper to wrap async jobs for APScheduler's sync execution
+    # Helper to wrap async jobs for APScheduler's sync thread pool
     def _run_async(coro_func):
         def wrapper():
             try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    asyncio.ensure_future(coro_func())
-                else:
-                    loop.run_until_complete(coro_func())
+                asyncio.run(coro_func())
             except Exception as e:
                 logger.error(f"Scheduler job error: {e}")
         return wrapper
