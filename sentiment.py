@@ -38,7 +38,9 @@ RSS_FEEDS = {
     "BS Markets": "https://www.business-standard.com/rss/markets-106.rss",
     "Google Nifty": "https://news.google.com/rss/search?q=nifty+OR+banknifty+OR+sensex&hl=en-IN&gl=IN&ceid=IN:en",
     "Google FII": "https://news.google.com/rss/search?q=FII+DII+india+market&hl=en-IN&gl=IN&ceid=IN:en",
+    "Google RBI": "https://news.google.com/rss/search?q=RBI+rate+india+economy&hl=en-IN&gl=IN&ceid=IN:en",
     "NDTV Profit": "https://feeds.feedburner.com/ndtvprofit-latest",
+    "Reuters India": "https://news.google.com/rss/search?q=india+stock+market+reuters&hl=en-IN&gl=IN&ceid=IN:en",
 }
 
 # ═══════════════════ ENHANCED FINANCIAL LEXICON ════════════════
