@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from core.config import settings
@@ -126,10 +126,15 @@ app.include_router(accuracy_router)
 
 
 # ── Health Endpoint ───────────────────────────────────────────
-@app.get("/")
+@app.get("/", response_class=HTMLResponse)
 async def root():
-    """Root redirect to health."""
-    return {"message": "NiftySignals Pro v4.0", "docs": "/docs", "health": "/health"}
+    """Serve the NiftySignals dashboard."""
+    import os
+    html_path = os.path.join(os.path.dirname(__file__), "static", "index.html")
+    if os.path.exists(html_path):
+        with open(html_path, "r", encoding="utf-8") as f:
+            return f.read()
+    return HTMLResponse("<h1>NiftySignals Pro v4.0</h1><p>Dashboard not found. Check /health</p>")
 
 @app.get("/health")
 async def health():
