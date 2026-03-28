@@ -119,9 +119,24 @@ async def get_option_chain(
 async def get_global():
     score_data = cache.get("global:score")
     indian_idx = cache.get("global:indian_indices")
-    if not score_data:
-        return {"score": 0, "label": "NO DATA", "indian_indices": {}, "details": {}}
-    return _sanitize({**score_data, "indian_indices": indian_idx or {}})
+    if score_data and score_data.get("score", 0) != 0:
+        return _sanitize({**score_data, "indian_indices": indian_idx or {}})
+
+    # Cache empty — fetch fresh (global markets trade 24/7)
+    try:
+        from global_analysis import fetch_all_global_data, calculate_global_score, analyze_indian_indices
+        data = fetch_all_global_data()
+        if data:
+            score, label, details = calculate_global_score(data)
+            cache.set("global:data", data, ttl=600)
+            cache.set("global:score", {"score": score, "label": label, "details": details}, ttl=600)
+            idx = analyze_indian_indices()
+            cache.set("global:indian_indices", idx, ttl=600)
+            return _sanitize({"score": score, "label": label, "details": details, "indian_indices": idx or {}})
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Global fetch failed: {e}")
+    return {"score": 0, "label": "NO DATA", "indian_indices": {}, "details": {}}
 
 
 @router.get("/vix-history")
@@ -230,3 +245,30 @@ async def get_news():
         import logging
         logging.getLogger(__name__).warning(f"News fetch failed: {e}")
         return {"score": 0, "label": "NO DATA", "headlines": []}
+
+
+@router.get("/oi")
+async def get_oi(symbol: str = Query("NIFTY50", pattern="^(NIFTY50|BANKNIFTY)$")):
+    """OI analysis — PCR, Max Pain, bias, support/resistance."""
+    oi = cache.get(f"oi:{symbol}")
+    if oi:
+        return _sanitize(oi)
+
+    # Market closed — return proper state
+    now = datetime.now(IST)
+    if now.weekday() >= 5 or now.hour * 60 + now.minute > 930 or now.hour * 60 + now.minute < 555:
+        return {
+            "symbol": symbol,
+            "pcr": 0, "max_pain": 0,
+            "oi_bias": "CLOSED",
+            "support": [], "resistance": [],
+            "market_status": "CLOSED",
+            "message": "OI data available during market hours only. NSE provides live option chain 9:15 AM - 3:30 PM.",
+        }
+    return {
+        "symbol": symbol,
+        "pcr": 0, "max_pain": 0,
+        "oi_bias": "LOADING",
+        "support": [], "resistance": [],
+        "message": "Loading OI data...",
+    }
