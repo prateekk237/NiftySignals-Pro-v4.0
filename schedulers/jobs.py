@@ -429,41 +429,30 @@ async def job_position_monitor_3s():
 # ═══════════════════════════════════════════════════════════════
 
 async def job_signal_60s():
-    """Full confluence signal computation. The heaviest job."""
-    # ── Market closed guard ───────────────────────────────────
-    if not _is_market_open():
-        for symbol in ["NIFTY50", "BANKNIFTY"]:
-            payload = {
-                "symbol": symbol, "action": "NO TRADE",
-                "signal_label": "MARKET CLOSED",
-                "confluence_score": 0, "confidence": 0,
-                "strike": 0, "entry_premium": 0, "sl_premium": 0,
-                "target1_premium": 0, "target2_premium": 0,
-                "components": {}, "trade": {"action": "NO TRADE", "reasoning": ["Market is closed"]},
-                "timestamp": _now_ist(),
-            }
-            cache.set(f"signal:{symbol}", payload, ttl=120)
-        return
+    """Full confluence signal computation. The heaviest job.
+    v4.1: Always computes indicators (from yfinance history).
+          Only generates trade signals during market hours.
+    """
+    market_open = _is_market_open()
 
     try:
         for symbol in ["NIFTY50", "BANKNIFTY"]:
             tf_key = "Intraday"
             tf = TIMEFRAMES[tf_key]
 
-            # Fetch OHLCV
+            # Fetch OHLCV — works 24/7 from yfinance history
             df = await data_fetcher.fetch_ohlcv(symbol, tf["interval"], tf["period"])
             if df.empty:
                 continue
 
-            # Compute all indicators
+            # ── Always compute indicators (visible on dashboard 24/7) ──
             df = indicator_service.compute_indicators(df, tf_key)
-            cache.set(f"ohlcv:{symbol}", df, ttl=120)
+            cache.set(f"ohlcv:{symbol}", df, ttl=300)
 
-            current_price = float(df["Close"].iloc[-1])
             indicator_signals = indicator_service.get_signals(df)
-            cache.set(f"indicator_signals:{symbol}", indicator_signals, ttl=120)
+            cache.set(f"indicator_signals:{symbol}", indicator_signals, ttl=300)
 
-            # CPR
+            # CPR (daily levels — always useful)
             prev_ohlc = await data_fetcher.get_previous_day_ohlc(symbol)
             if prev_ohlc["high"] > 0:
                 cpr = indicator_service.calc_cpr(prev_ohlc["high"], prev_ohlc["low"], prev_ohlc["close"])
@@ -473,7 +462,23 @@ async def job_signal_60s():
             orb = indicator_service.calc_orb_levels(df)
             cache.set(f"orb:{symbol}", orb, ttl=86400)
 
-            # Get cached global/vix/oi/news
+            # ── Market closed → NO TRADE signal, skip confluence ──
+            if not market_open:
+                payload = {
+                    "symbol": symbol, "action": "NO TRADE",
+                    "signal_label": "MARKET CLOSED",
+                    "confluence_score": 0, "confidence": 0,
+                    "strike": 0, "entry_premium": 0, "sl_premium": 0,
+                    "target1_premium": 0, "target2_premium": 0,
+                    "components": {}, "trade": {"action": "NO TRADE", "reasoning": ["Market is closed"]},
+                    "timestamp": _now_ist(),
+                }
+                cache.set(f"signal:{symbol}", payload, ttl=300)
+                continue
+
+            # ── Market is OPEN — generate trade signals ───────────
+            current_price = float(df["Close"].iloc[-1])
+
             global_data = cache.get("global:score") or {"score": 0, "label": "N/A"}
             vix_live = cache.get("vix:live") or {}
             vix_val = vix_live.get("vix", 15.0)
