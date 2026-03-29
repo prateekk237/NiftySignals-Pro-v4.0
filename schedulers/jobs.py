@@ -770,6 +770,20 @@ async def job_daily_levels():
 #  SCHEDULER SETUP
 # ═══════════════════════════════════════════════════════════════
 
+# ═══════════════════════════════════════════════════════════════
+#  JOB: Telegram Poll — every 3 seconds (always runs)
+# ═══════════════════════════════════════════════════════════════
+
+async def job_telegram_poll_3s():
+    """Poll Telegram for incoming commands and reply with live data."""
+    try:
+        from services.telegram_service import telegram
+        if telegram.is_configured:
+            await telegram.poll_updates()
+    except Exception as e:
+        logger.warning(f"Telegram poll error: {e}")
+
+
 def setup_scheduler(scheduler):
     """Register all jobs with APScheduler. Called from main.py startup."""
 
@@ -823,5 +837,9 @@ def setup_scheduler(scheduler):
     scheduler.add_job(_run_async(job_daily_levels), "cron",
                       hour=9, minute=15, timezone=IST,
                       id="job_daily_levels", max_instances=1, replace_existing=True)
+
+    # ── Always-On Jobs ────────────────────────────────────────
+    scheduler.add_job(_run_async(job_telegram_poll_3s), "interval", seconds=3,
+                      id="job_telegram_poll_3s", max_instances=1, replace_existing=True)
 
     logger.info("All scheduler jobs registered")
