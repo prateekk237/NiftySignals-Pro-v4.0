@@ -95,6 +95,22 @@ class TelegramService:
     def is_configured(self) -> bool:
         return bool(self.bot_token and self.chat_id)
 
+    def disconnect(self):
+        """Remove all config and stop polling."""
+        self.bot_token = None
+        self.chat_id = None
+        self._client = None
+        self._last_update_id = 0
+        # Delete config files
+        for path in ["/data/telegram_config.json", "telegram_config.json"]:
+            try:
+                if os.path.exists(path):
+                    os.remove(path)
+                    logger.info(f"Telegram config deleted: {path}")
+            except Exception:
+                pass
+        logger.info("Telegram disconnected")
+
     # ── Send Message ───────────────────────────────────────────
 
     async def send(self, text: str, parse_mode: str = "HTML") -> bool:
