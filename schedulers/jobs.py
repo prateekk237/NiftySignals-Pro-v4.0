@@ -430,6 +430,21 @@ async def job_position_monitor_3s():
 
 async def job_signal_60s():
     """Full confluence signal computation. The heaviest job."""
+    # ── Market closed guard ───────────────────────────────────
+    if not _is_market_open():
+        for symbol in ["NIFTY50", "BANKNIFTY"]:
+            payload = {
+                "symbol": symbol, "action": "NO TRADE",
+                "signal_label": "MARKET CLOSED",
+                "confluence_score": 0, "confidence": 0,
+                "strike": 0, "entry_premium": 0, "sl_premium": 0,
+                "target1_premium": 0, "target2_premium": 0,
+                "components": {}, "trade": {"action": "NO TRADE", "reasoning": ["Market is closed"]},
+                "timestamp": _now_ist(),
+            }
+            cache.set(f"signal:{symbol}", payload, ttl=120)
+        return
+
     try:
         for symbol in ["NIFTY50", "BANKNIFTY"]:
             tf_key = "Intraday"
