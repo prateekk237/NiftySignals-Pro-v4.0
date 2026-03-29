@@ -66,6 +66,13 @@ async def lifespan(app: FastAPI):
     llm_service.load_keys_from_db()
     logger.info(f"LLM providers loaded: {len(llm_service.providers)} active")
 
+    # 2b. Load Telegram config from file (persists across restarts)
+    from services.telegram_service import telegram
+    if telegram.load_config():
+        logger.info(f"Telegram bot loaded: chat_id={telegram.chat_id[:6]}***")
+    else:
+        logger.info("Telegram not configured yet (configure in Settings)")
+
     # 3. Setup and start scheduler
     setup_scheduler(scheduler)
     scheduler.start()
