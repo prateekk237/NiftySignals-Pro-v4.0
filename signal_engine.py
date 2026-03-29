@@ -228,21 +228,25 @@ def generate_trade_recommendation(
         confidence = raw_conf / BUY_THRESHOLD * 33
     confidence = min(confidence, 98)
 
-    strategy_type = "BUY"
+    # v4 FIX: No naked option selling — this app is BUY-only.
+    # When VIX is extreme + weak signal → NO TRADE (not SELL)
     if vix_level > VIX_HIGH and abs(confluence_score) < STRONG_BUY_THRESHOLD:
-        strategy_type = "SELL"
+        return _no_trade(
+            f"VIX too high ({vix_level:.1f}) for weak signal ({confluence_score:+.3f}). "
+            f"Wait for stronger confluence or lower VIX."
+        )
 
     atr = float(df["ATR_14"].iloc[-1]) if "ATR_14" in df.columns and not pd.isna(df["ATR_14"].iloc[-1]) else current_price * 0.01
 
     if is_bullish:
-        action = f"{strategy_type} CE"
+        action = "BUY CE"
         strike = atm_strike
         otm_strike = atm_strike + strike_step
         sl_underlying = current_price - atr * SL_ATR_MULTIPLIER
         target1_underlying = current_price + atr * 1.5
         target2_underlying = current_price + atr * 2.5
     else:
-        action = f"{strategy_type} PE"
+        action = "BUY PE"
         strike = atm_strike
         otm_strike = atm_strike - strike_step
         sl_underlying = current_price + atr * SL_ATR_MULTIPLIER
@@ -263,16 +267,11 @@ def generate_trade_recommendation(
 
     entry = actual_premium if actual_premium else round(est_premium, 1)
 
-    if strategy_type == "BUY":
-        sl_prem = round(entry * (1 - SL_OPTION_BUY_PCT / 100), 1)
-        t1_prem = round(entry * 1.5, 1)
-        t2_prem = round(entry * 2.0, 1)
-        risk_per_lot = (entry - sl_prem) * lot_size
-    else:
-        sl_prem = round(entry * 1.5, 1)
-        t1_prem = round(entry * 0.5, 1)
-        t2_prem = round(entry * 0.25, 1)
-        risk_per_lot = (sl_prem - entry) * lot_size
+    # BUY-only premium calculations
+    sl_prem = round(entry * (1 - SL_OPTION_BUY_PCT / 100), 1)
+    t1_prem = round(entry * 1.5, 1)
+    t2_prem = round(entry * 2.0, 1)
+    risk_per_lot = (entry - sl_prem) * lot_size
 
     max_risk = capital * (MAX_RISK_PER_TRADE_PCT / 100)
     max_lots = max(1, int(max_risk / risk_per_lot)) if risk_per_lot > 0 else 1
@@ -323,7 +322,7 @@ def generate_trade_recommendation(
         "potential_profit_t2": round(abs(t2_prem - entry) * lot_size * max_lots, 0),
         "risk_reward": round(abs(t1_prem - entry) / max(abs(entry - sl_prem), 0.01), 2),
         "confidence": round(confidence, 0),
-        "strategy_type": strategy_type, "reasoning": reasons,
+        "strategy_type": "BUY", "reasoning": reasons,
         "atr": round(atr, 2), "timeframe": timeframe,
         "capital_warning": capital_warning,
         "timestamp": datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S"),
